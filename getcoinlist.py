@@ -193,6 +193,63 @@ def update1(coin_name,description_cn):
     db.close()
 
 #trans2de('description_jp','jp')
-trans2de('description_id','id')
-trans2de('description_vi','vi')
+#trans2de('description_id','id')
+#trans2de('description_vi','vi')
 #trans2de('description_kr','kr')
+
+blog_url = 'https://simpleswap.io/blog/page/1'
+def crawlBlogs():
+
+    for page in range(1,10):
+        url ='https://simpleswap.io/blog/page/{0}'.format(page)
+        res = requests.get(url)
+        #print(res.text)
+        soup = BeautifulSoup(res.text, 'lxml')
+        #a=soup.find_all('img')
+        for tag in soup.find_all(name="div", attrs={"class":re.compile(r"post-container")}):
+            #对每一个币种进行处理
+
+            #print(tag)
+            a = tag.find(name="a", attrs={"href":re.compile(r"https://simpleswap.io/blog/(\s\w+)?")})
+            post_title = a['title']
+            post_url = a['href']
+            crawlSingleBlog(post_url)
+        
+
+
+def crawlSingleBlog(url):
+    res = requests.get(url)
+    soup = BeautifulSoup(res.text, 'lxml')
+    post_title = soup.find(name="h1", attrs={"class":re.compile(r"post-title(\s\w+)?")})
+    print(post_title.text)
+    img_url = soup.find(name="img", attrs={"src":re.compile(r"https://simpleswap.io/blog/wp-content/uploads/(\s\w+)?")})
+    print(img_url['src'])
+    body = soup.find(name="div", attrs={"class":re.compile(r"post-content(\s\w+)?")})
+    print(body.text)
+    img_data = requests.get(img_url['src']).content
+    file_name = post_title.text.replace('|','')
+    file_name = file_name.replace('!','')
+    file_name = file_name.replace('?','')
+    file_name = file_name.replace(' ','_')
+    file_name = file_name+'.jpg'
+    with open(file_name, 'wb') as handler:
+        handler.write(img_data)
+    # 打开数据库连接
+    db = pymysql.connect(host='localhost', port=3306,user='root', passwd='123qwe', db='gatherinfo', charset='utf8')
+    # 使用 cursor() 方法创建一个游标对象 cursor
+    cursor = db.cursor()
+    sql = "insert into blog(title,body,image_name) value(%s,%s,%s)"
+    data = (post_title.text,body.text,file_name)
+    try:
+        # 执行SQL语句
+        cursor.execute(sql,data)
+        # 提交到数据库执行
+        db.commit()
+    except:
+        # 发生错误时回滚
+        db.rollback()
+    #关闭资源连接
+    cursor.close()
+    db.close()
+
+crawlBlogs()
