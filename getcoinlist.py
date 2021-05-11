@@ -226,6 +226,8 @@ def crawlSingleBlog(url):
     print(img_url['src'])
     body = soup.find(name="div", attrs={"class":re.compile(r"post-content(\s\w+)?")})
     print(body.text)
+    time = soup.find(name="p", attrs={"class":re.compile(r"post-date-footer(\s\w+)?")})
+    print(time.text)
     img_data = requests.get(img_url['src']).content
     file_name = post_title.text.replace('|','')
     file_name = file_name.replace('!','')
@@ -238,8 +240,8 @@ def crawlSingleBlog(url):
     db = pymysql.connect(host='localhost', port=3306,user='root', passwd='123qwe', db='gatherinfo', charset='utf8')
     # 使用 cursor() 方法创建一个游标对象 cursor
     cursor = db.cursor()
-    sql = "insert into blog(title,body,image_name) value(%s,%s,%s)"
-    data = (post_title.text,body.text,file_name)
+    sql = "insert into blog(title,body,image_name,time) value(%s,%s,%s,%s)"
+    data = (post_title.text,body.text,file_name,time.text)
     try:
         # 执行SQL语句
         cursor.execute(sql,data)
@@ -253,3 +255,8 @@ def crawlSingleBlog(url):
     db.close()
 
 crawlBlogs()
+
+
+
+
+
