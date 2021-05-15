@@ -1,3 +1,5 @@
+from time import time
+from typing import FrozenSet
 import requests
 import re
 from bs4 import BeautifulSoup  # 引入BS库
@@ -254,9 +256,189 @@ def crawlSingleBlog(url):
     cursor.close()
     db.close()
 
-crawlBlogs()
+#crawlBlogs()
 
 
+#从调用coinmarket cap 接口
+def coinmarketCap():
+    from requests import Request, Session
+    from requests.exceptions import ConnectionError, Timeout, TooManyRedirects
+    import json
 
+    url = 'https://pro-api.coinmarketcap.com/v1/cryptocurrency/info'
+    parameters = {
+    'id':'1,2'
+    }
+    headers = {
+    'Accepts': 'application/json',
+    'X-CMC_PRO_API_KEY': '1e437ea9-ad30-4b9b-a467-8b4f314b4781',
+    }
 
+    session = Session()
+    session.headers.update(headers)
 
+    try:
+        response = session.get(url, params=parameters)
+        data = json.loads(response.text)
+        print(data)
+    except (ConnectionError, Timeout, TooManyRedirects) as e:
+        print(e)
+
+#从coinmarketcap 抓取币信息
+def getCoinInfo(key,url):
+    url = url
+    res = requests.get(url)
+    soup = BeautifulSoup(res.text, 'lxml')
+    markDown=""
+    try:
+        content = soup.find_all(name="div", attrs={"class":re.compile(r"sc-1lt0cju-0(\s\w+)?")})   
+        print(content[0].contents)
+        first_header = content[0].find(re.compile("^h(\s\w+)?"))
+        print(first_header)
+        sliblings = first_header.find_next_siblings()
+        flag = 0
+        markDown = "# "+first_header.text
+        for element in sliblings:
+            
+            #print(element)
+            #如果 是 tag 为 h开头 把之前段落做成一句话
+            #如果 tage 是 P 将加入之前段落
+            if "p" in element.name:
+                if flag==0:
+                    #print("是段落")
+                    markDown+='\r\n'
+                    markDown+=element.text
+                    markDown+='\r\n'
+            if "h" in element.name:
+                #print("是标题")
+                #如果是标题，看看是否是有相关网站信息 标题 如果是 不处理
+                if "Related Pages" in element.text or "Where Can You Buy" in element.text:
+                    flag = 1
+                else:
+                    #翻译成 markDown 格式
+                    flag = 0
+                    markDown+='\r\n'
+                    markDown+='# '
+                    markDown+=element.text
+                    markDown+='\r\n'
+        #print(flag)
+    except:
+        markDown = "# No Brief Found Now"
+        
+        #print('\r\n')
+    #print(markDown)
+    markDown= bytes(markDown, encoding = "utf8")
+    # 向数据库写入 代币信息
+    # 打开数据库连接
+    db = pymysql.connect(host='localhost', port=3306,user='root', passwd='123qwe', db='gatherinfo', charset='utf8')
+    # 使用 cursor() 方法创建一个游标对象 cursor
+    cursor = db.cursor()
+    sql = "UPDATE coinbrief SET coinbrief.breif =%s WHERE coinbrief.key =%s"
+    #print(key,markDown)
+    data= (markDown,key)
+    print(data)
+    print(sql)
+    try:
+        # 执行SQL语句
+        cursor.execute(sql,data)
+        # 提交到数据库执行
+        db.commit()
+    except:
+        # 发生错误时回滚
+        db.rollback()
+    # 关闭数据库连接
+    db.close()
+
+import time
+def getCoinBrief():
+    # 打开数据库连接
+    db = pymysql.connect(host='localhost', port=3306,user='root', passwd='123qwe', db='gatherinfo', charset='utf8')
+    # 使用 cursor() 方法创建一个游标对象 cursor
+    cursor = db.cursor()
+    sql = "select coinbrief.key,coins.slug from coinbrief,coins where coinbrief.key = coins.symbol AND coinbrief.breif is NULL"
+    try:
+        # 执行SQL语句
+        cursor.execute(sql)
+        # 获取所有记录列表
+        results = cursor.fetchall()
+        
+        for row in results:
+            #time.sleep(5)
+            key = row[0]
+            url = "https://coinmarketcap.com/currencies/{0}/".format(row[1])
+            print('processing url :'+url)
+            # 获取当前代币信息
+            getCoinInfo(key,url)
+        total = cursor.rowcount
+        print("已经处理总数: %s" % \
+            (total))
+    except:
+        print("Error: unable to fetch data")
+    finally:
+        cursor.close()
+        db.close()    
+
+def update_brief(key,brief,field_name):
+    # 打开数据库连接
+    db = pymysql.connect(host='localhost', port=3306,user='root', passwd='123qwe', db='gatherinfo', charset='utf8')
+    # 使用 cursor() 方法创建一个游标对象 cursor
+    cursor = db.cursor()
+    sql = "UPDATE coinbrief SET "+field_name+" =%s WHERE coinbrief.key =%s"
+    data= (brief,key)
+    #print(sql)
+    try:
+        # 执行SQL语句
+        cursor.execute(sql,data)
+        # 提交到数据库执行
+        db.commit()
+    except:
+        # 发生错误时回滚
+        db.rollback()
+    # 关闭数据库连接
+    db.close()
+
+def trans_brief(field_name,language):
+    # 打开数据库连接
+    db = pymysql.connect(host='localhost', port=3306,user='root', passwd='123qwe', db='gatherinfo', charset='utf8')
+    # 使用 cursor() 方法创建一个游标对象 cursor
+    cursor = db.cursor()
+    sql = "select coinbrief.key,coinbrief.en from coinbrief"
+    try:
+        # 执行SQL语句
+        cursor.execute(sql)
+        # 获取所有记录列表
+        results = cursor.fetchall()
+        
+        for row in results:
+            #time.sleep(5)
+            key = row[0]
+            en = row[1]
+            print('正在翻译 :'+key)
+            # 翻译代币信息 2000个字一次
+            print(len(en))
+            sentences = str.splitlines(en)
+            res = ""
+            for i in sentences:
+                res+= translate(i,'en',language)
+                res+='\r\n'
+            #再 res 中 # 后面加空格
+            res = res.replace('#', '#  ')
+            update_brief(key,res,field_name)
+        total = cursor.rowcount
+        print("已经处理总数: %s" % \
+            (total))
+    except:
+        print("Error: unable to fetch data")
+    finally:
+        cursor.close()
+        db.close()        
+
+trans_brief('es','es')
+trans_brief('de','de')
+trans_brief('fr','fr')
+trans_brief('ru','ru')
+trans_brief('pt','pt')
+trans_brief('jp','jp')
+trans_brief('id','id')
+trans_brief('vi','vi')
+trans_brief('kr','kr')
