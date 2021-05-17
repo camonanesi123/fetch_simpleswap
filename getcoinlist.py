@@ -397,6 +397,147 @@ def update_brief(key,brief,field_name):
     # 关闭数据库连接
     db.close()
 
+
+
+
+
+from multiprocessing import Process, Queue
+import threading
+import time
+ 
+tran_text = ''
+def process_data(threadName, q,language):
+    global tran_text
+    while not exitFlag:
+        queueLock.acquire()
+        if not workQueue.empty():
+            data = q.get()
+            queueLock.release()
+            print("%s processing %s" % (threadName, data))
+            res = translate(data,'en',language)
+            if data[0] == '#':
+                res='# '+res
+            tran_text+=res    
+        else:
+            queueLock.release()
+        time.sleep(1)
+class myThread (threading.Thread):
+    def __init__(self, threadID, name, q,launguage):
+        threading.Thread.__init__(self)
+        self.threadID = threadID
+        self.name = name
+        self.q = q
+        self.launguage = launguage
+    def run(self):
+        print("Starting " + self.name)
+        process_data(self.name, self.q ,self.launguage)
+        print("Exiting " + self.name)
+
+
+
+    
+ 
+
+exitFlag = 0
+threadList = ["Thread-1", "Thread-2", "Thread-3", "Thread-4", "Thread-5"]
+queueLock = threading.Lock()
+workQueue = Queue(1000)
+threads = []
+threadID = 1
+def trans_brief(language):
+    # 打开数据库连接
+    global exitFlag
+    global threadList 
+    global queueLock 
+    global workQueue 
+    global threads 
+    global threadID
+    global tran_text
+    db = pymysql.connect(host='localhost', port=3306,user='root', passwd='123qwe', db='gatherinfo', charset='utf8')
+    # 使用 cursor() 方法创建一个游标对象 cursor
+    cursor = db.cursor()
+    sql = "select coinbrief.key,coinbrief.en from coinbrief"
+    try:
+        # 执行SQL语句
+        cursor.execute(sql)
+        # 获取所有记录列表
+        results = cursor.fetchall()
+        
+        for row in results:
+            #time.sleep(5)
+            key = row[0]
+            en = row[1]
+            print('正在翻译 :'+key)
+            # 翻译代币信息 2000个字一次
+            print(len(en))
+            sentences = str.splitlines(en)
+            #去空串 ['','']
+            sentences = list(filter(None, sentences)) 
+            # 创建新线程
+            exitFlag = 0
+            print(threadList)
+            for tName in threadList:
+                thread = myThread(threadID, tName, workQueue,language)
+                thread.start()
+                threads.append(thread)
+                threadID += 1
+            print(threadList)
+            print('1')
+            # 填充队列
+            queueLock.acquire()
+            for word in sentences:
+                workQueue.put(word)
+            queueLock.release()
+            print('2')
+            # 等待队列清空
+            
+            while not workQueue.empty():
+                #print(workQueue.qsize())
+                pass
+            print('3')
+            # 通知线程是时候退出
+            exitFlag = 1
+            print('4')
+            # 等待所有线程完成
+            for t in threads:
+                t.join()
+            print("Exiting Main Thread")
+            #print(tran_text)
+            tran_text =''
+            #print(threads)
+            #print(threadID)
+            # for i in sentences:
+            #     #如果 i 以# 开始，那么把# 从里面摘除之后翻译
+                
+            #     a= translate(i,'en',language)
+            #     print(a)
+            #     if i[0] == '#':
+            #         a='# '+a
+            #     res+= a
+            #     res+='\r\n'
+            # #再 res 中 # 后面加空格
+            # update_brief(key,res,field_name)
+        total = cursor.rowcount
+        print("已经处理总数: %s" % \
+            (total))
+    except:
+        print("Error: unable to fetch data")
+    finally:
+        cursor.close()
+        db.close()        
+#trans_brief('jp')
+#trans_brief('id')
+#trans_brief('iv')
+#trans_brief('kr')
+
+#trans_brief('jp','jp')
+
+#trans_brief('id','id')
+
+#trans_brief('iv','vi')
+
+
+#trans_brief('kr','kr')
 def trans_brief(field_name,language):
     # 打开数据库连接
     db = pymysql.connect(host='localhost', port=3306,user='root', passwd='123qwe', db='gatherinfo', charset='utf8')
@@ -417,12 +558,21 @@ def trans_brief(field_name,language):
             # 翻译代币信息 2000个字一次
             print(len(en))
             sentences = str.splitlines(en)
+            #去空串 ['','']
+            sentences = list(filter(None, sentences)) 
             res = ""
             for i in sentences:
-                res+= translate(i,'en',language)
+                i = i.strip()
+                print(i)
+                if i[0] == '#':
+                    a= '# '+translate(i[1:],'en',language)
+                    res=res+a
+                else:
+                    res+= translate(i,'en',language)
+                #print(res)
                 res+='\r\n'
             #再 res 中 # 后面加空格
-            res = res.replace('#', '#  ')
+            #res = res.replace('#', '#  ')
             update_brief(key,res,field_name)
         total = cursor.rowcount
         print("已经处理总数: %s" % \
@@ -433,12 +583,4 @@ def trans_brief(field_name,language):
         cursor.close()
         db.close()        
 
-trans_brief('es','es')
-trans_brief('de','de')
-trans_brief('fr','fr')
-trans_brief('ru','ru')
-trans_brief('pt','pt')
-trans_brief('jp','jp')
 trans_brief('id','id')
-trans_brief('vi','vi')
-trans_brief('kr','kr')
