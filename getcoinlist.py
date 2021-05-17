@@ -581,6 +581,78 @@ def trans_brief(field_name,language):
         print("Error: unable to fetch data")
     finally:
         cursor.close()
-        db.close()        
+        db.close()       
 
-trans_brief('id','id')
+def update_page(key,brief,field_name):
+    # 打开数据库连接
+    db = pymysql.connect(host='localhost', port=3306,user='root', passwd='123qwe', db='gatherinfo', charset='utf8')
+    # 使用 cursor() 方法创建一个游标对象 cursor
+    cursor = db.cursor()
+    sql = "UPDATE pages SET "+field_name+" =%s WHERE pages.key =%s"
+    data= (brief,key)
+    #print(sql)
+    try:
+        # 执行SQL语句
+        cursor.execute(sql,data)
+        # 提交到数据库执行
+        db.commit()
+    except:
+        # 发生错误时回滚
+        db.rollback()
+    # 关闭数据库连接
+    db.close()
+
+def trans_page(field_name,language):
+    # 打开数据库连接
+    db = pymysql.connect(host='localhost', port=3306,user='root', passwd='123qwe', db='gatherinfo', charset='utf8')
+    # 使用 cursor() 方法创建一个游标对象 cursor
+    cursor = db.cursor()
+    sql = "select pages.key,pages.en from pages where pages.key='terms'"
+    try:
+        # 执行SQL语句
+        cursor.execute(sql)
+        # 获取所有记录列表
+        results = cursor.fetchall()
+        
+        for row in results:
+            #time.sleep(5)
+            key = row[0]
+            en = row[1]
+            print('正在翻译 :'+key)
+            # 翻译代币信息 2000个字一次
+            print(len(en))
+            sentences = str.splitlines(en)
+            #去空串 ['','']
+            sentences = list(filter(None, sentences)) 
+            res = ""
+            for i in sentences:
+                i = i.strip()
+                print(i)
+                if i[0] == '#':
+                    a= '# '+translate(i[1:],'en',language)
+                    res=res+a
+                else:
+                    res+= translate(i,'en',language)
+                #print(res)
+                res+='\r\n'
+            #再 res 中 # 后面加空格
+            #res = res.replace('#', '#  ')
+            update_page(key,res,field_name)
+        total = cursor.rowcount
+        print("已经处理总数: %s" % \
+            (total))
+    except:
+        print("Error: unable to fetch data")
+    finally:
+        cursor.close()
+        db.close()            
+
+trans_page('es','es')
+trans_page('de','de')
+trans_page('fr','fr')
+trans_page('ru','ru')
+trans_page('pt','pt')
+trans_page('jp','jp')
+trans_page('id','id')
+trans_page('vi','vi')
+trans_page('kr','kr')
